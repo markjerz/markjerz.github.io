@@ -3,7 +3,7 @@ layout: page
 title: About me
 ---
 
-I'm a father to two awesome little boys, a co-founder of a software development consultancy and a fairly keen cyclist.
+I'm a father to two awesome little boys, a co-founder of a software development consultancy and a fairly keen cyclist (when I've got the time).
 
 My work is focussed on building .Net based web applications for companies of varying sizes. As a result, I know an awful lot about building software in .Net and on Azure. I'm also the main contributor to a C# ORM called [Dashing](http://polylytics.github.io/dashing/).
 
