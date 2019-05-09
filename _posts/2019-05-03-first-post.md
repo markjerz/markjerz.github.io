@@ -1,5 +1,5 @@
 ---
-title: Dashing: the good, the bad and the ugly
+title: Dashing, how's our little C# ORM doing?
 ---
 
 It's been almost 5 years since the inception of Dashing so it's due a thorough review, or at least a summation of all my current thoughts regarding it.
