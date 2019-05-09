@@ -99,11 +99,18 @@ I still think that Dashing is a great ORM and I've done some good work recently 
  I'd like to solve this by building a beautiful strongly typed SQL builder. I've got another wip branch for this but it requires serious thought as I want a great API from the first version.
 - **Projections**  
  Selecting only the columns you want is, at the moment, not very elegant. This is definitely something I'd like to fix but in 2 different ways. In EF you can `.Select()` your projection but this loses the original typings. I'd like to provide both that and some mechanism for re-using the existing types so that change-tracking could still work.
+ - **Multi-column primary keys**  
+ We've never used them but there's definitely been the odd occasion where it would have made a lot of sense and improved the system design.
+ - **Inheritance Support**  
+  Again, not something we've needed to use but it would be a nice feature for those occasions where you want to store a hierarchy of types in the same table.
 - **Event Handling**  
  We've got some basic event handling built in to Dashing but it needs some consolidation and re-work to bring it up to scratch.
 - **Caching/Full-Text Search/Concurrency**  
  It's possible to do all of these things already but, my hope would be that, by building a great events system through Dashing we could provide simple plugins for common scenarios that you may expect to have "out of the box" in an ORM.
+- **Oracle/Postgres etc**  
+ It's an SQL Server, MySQL ORM at the moment really so we'd need to do a fair bit of work to start supporting some of the other databases. Happy to receive pull requests before we get to them!
 
+ So, the future of Dashing looks good to me. We've got a solid roadmap to move Dashing forward but we'd also love to hear from other people who've used it and see where they think it's future lies.
 
 
 
