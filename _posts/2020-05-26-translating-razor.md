@@ -40,7 +40,7 @@ So, you can make use of this to parse razor files and get the abstract syntax tr
 
 ```
 var razorParser = new RazorParser(new CSharpCodeParser(), new HtmlMarkupParser());
-    this.results = razorParser.Parse((TextReader)new SeekableTextReader(this.razor));
+this.results = razorParser.Parse((TextReader)new SeekableTextReader(this.razor));
 ```
 
 From this, we can then look at the tree of nodes, extract out things that look like text strings and replace those pieces of code with the strongly typed method invocations instead. At the same time, we generate the strongly typed helper classes which contain the English fallback.
