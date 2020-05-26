@@ -1,5 +1,5 @@
 ---
-title: How to automatically translating ASP.Net Mvc razor views
+title: How to automatically translate ASP.Net Mvc razor views
 ---
 
 # Introduction
