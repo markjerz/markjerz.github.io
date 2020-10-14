@@ -46,7 +46,7 @@ Obviously, we have the difference in that our interface uses Tasks (a necessary 
 
 So, given that we are no longer able to tell the repository when to update or save changes how do we do this automatically as part of the infrastructure?
 
-**We need a change tracker!** - a thing that will tell us when changes have been made, and what, do that we can automatically update the persistence layer.
+**We need a change tracker!** - a thing that will tell us when changes have been made, and what, so that we can automatically update the persistence layer.
 
 Many .Net [ORM](https://en.wikipedia.org/wiki/Object%E2%80%93relational_mapping)s provide similar functionality. This post is a review of some of the techniques used to implement it.
 
@@ -65,7 +65,7 @@ using (var context = new BloggingContext())
 }
 ```
 
-The key parts of this are that when you call `context.Blogs.First()` EF executes a sql query (assuming not already in the session) to get the blog data from SQL, it then does two things: store the properties in an actual instance of `Blog`, which it returns from this method invocation, and it stores the properties in a map so that it knows the original values.
+The key parts of this are that when you call `context.Blogs.First()` EF executes a (usually) sql query (assuming not already in the session) to get the blog data from database. It then does two things: store the properties in an actual instance of `Blog`, which it returns from this method invocation, and it stores the properties in a map so that it knows the original values.
 
 When you change the `Url` property nothing happens as far as EF is concerned. This is just a standard property setter.
 
@@ -77,7 +77,7 @@ While not the recommended approach any more, EF Core also supports a different c
 
 ## Dashing
 
-(Dashing)[https://github.com/Polylytics/dashing] is an ORM mostly written by me. In order to achieve change tracking in entities we take a drastically different approach. At compile time, just after the assembly is created, we modify the IL code of each domain class so that change tracking simply becomes part of the property setter.
+[Dashing](https://github.com/Polylytics/dashing) is an ORM mostly written at my company, [Abstract Leap](https://www.abstractleap.com). In order to achieve change tracking in entities we take a drastically different approach. At compile time, just after the assembly is created, we modify the IL code of each domain class so that change tracking simply becomes part of the property setter.
 
 In practice, you write the following code:
 
@@ -126,7 +126,9 @@ This has several advantages:
 
 ## Marten
 
-(Marten)[https://github.com/JasperFx/marten] is a .NET Transactional Document DB and Event Store on PostgreSQL. Marten provides a range of options in terms of persisting changes to entities. Essentially, either you have automatic change tracking or you don't. However, having looked at the implementation you may want, at least for now, to stay away from the automatic change tracker. It's a very simple implementation, and probably works very well, but performance may vary.
+[Marten](https://github.com/JasperFx/marten) is a .NET Transactional Document DB and Event Store on PostgreSQL. 
+
+Marten provides a range of options in terms of persisting changes to entities. Essentially, either you have automatic change tracking or you don't. However, having looked at the implementation you may want, at least for now, to stay away from the automatic change tracker. It's a very simple implementation, and probably works very well, but performance may vary.
 
 Similarly to EF Core, Marten stores the intial values of a entity during load from PostgreSQL. And similarly to EF Core, Marten then compares the initial values against the loaded instances. However, it does this through serialization of the entities in to JSON and then comparison of those JSON strings to check for changes.
 
