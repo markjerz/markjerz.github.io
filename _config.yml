@@ -25,6 +25,7 @@ description: Mostly things related to software, but I won't make any promises ..
 navbar-links:
   About Me: "aboutme"
   Projects:
+    - Rapport: "https://rapporthq.com"
     - Imitate Email: "https://imitate.email"
     - Dashing: "https://github.com/Polylytics/Dashing"
     - Abstract Leap: "https://www.abstractleap.com"
