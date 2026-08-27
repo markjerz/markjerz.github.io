@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Blog — Mark Jerzykowski</title>
+  <meta name="description" content="Writing by Mark Jerzykowski.">
+
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.jade.min.css">
+  <style>
+    :root { --pico-font-size: 105%; }
+  </style>
+</head>
+<body>
+
+  <main class="container">
+
+    <nav>
+      <ul><li><a href="/">← Home</a></li></ul>
+    </nav>
+
+    <header>
+      <h1>Blog</h1>
+    </header>
+
+    <article>
+      <h2><a href="/blog/2020-10-14-change-tracking.html">Change Tracking</a></h2>
+      <p><small><time datetime="2020-10-14">14 October 2020</time></small></p>
+      <p>
+        How .NET ORMs — EF Core, NHibernate, Dashing and Marten — detect entity
+        changes, and what that means for building a pure DDD repository.
+      </p>
+    </article>
+
+    <article>
+      <h2><a href="/blog/2020-06-09-similar-passwords.html">Similar Passwords</a></h2>
+      <p><small><time datetime="2020-06-09">9 June 2020</time></small></p>
+      <p>
+        Preventing users from re-using a password similar to an old one, when best
+        practice says you can't store the password in the first place.
+      </p>
+    </article>
+
+    <article>
+      <h2><a href="/blog/2020-05-26-translating-razor.html">Translating Razor</a></h2>
+      <p><small><time datetime="2020-05-26">26 May 2020</time></small></p>
+      <p>
+        Using the Razor parser to automatically rewrite hard-coded strings in ASP.Net
+        MVC views into calls to a translation engine.
+      </p>
+    </article>
+
+    <footer>
+      <p><small>© <span id="year"></span> Mark Jerzykowski</small></p>
+    </footer>
+
+  </main>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+
+</body>
+</html>

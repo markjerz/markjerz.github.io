@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Change Tracking — Mark Jerzykowski</title>
+  <meta name="description" content="A review of the change tracking techniques used by .NET ORMs: EF Core, NHibernate, Dashing and Marten.">
+
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.jade.min.css">
+  <style>
+    :root { --pico-font-size: 105%; }
+
+    /* keep long-form text at a comfortable reading measure */
+    main.container { max-width: 48rem; }
+
+    pre { font-size: 0.85em; }
+  </style>
+</head>
+<body>
+
+  <main class="container">
+
+    <nav>
+      <ul>
+        <li><a href="/">Home</a></li>
+        <li><a href="/blog/">Blog</a></li>
+      </ul>
+    </nav>
+
+    <article data-pagefind-body>
+
+      <header>
+        <h1>Change Tracking</h1>
+        <p><small><time datetime="2020-10-14">14 October 2020</time></small></p>
+      </header>
+
+      <h2>Introduction</h2>
+
+      <p>
+        I have been recently thinking about how one would make a pure repository
+        implementation (see
+        <a href="https://codewithshadman.com/repository-pattern-csharp/">Repository Pattern C#</a>
+        for details), of the type recommended in the DDD books. The desired approach to
+        repository creation in DDD is to facilitate the de-coupling of the infrastructure
+        code (e.g. accessing a database) from the domain specific code (e.g. creating a
+        new entity). In order to achieve that, they say, you should create repositories
+        that look very much like in-memory collections.
+      </p>
+
+      <p>In practice that means an interface that roughly looks like this:</p>
+
+      <pre><code>public interface IRepository&lt;T&gt; {
+    Task&lt;T&gt; GetByIdAsync&lt;TKey&gt;(TKey id);
+
+    Task&lt;IEnumerable&lt;T&gt;&gt; GetAllAsync();
+
+    void Add(T entity);
+
+    void Delete(T entity);
+}</code></pre>
+
+      <p>
+        If we look at the code from
+        <a href="https://codewithshadman.com/repository-pattern-csharp/">Repository Pattern C#</a>
+        we can immediately see some clear differences…
+      </p>
+
+      <pre><code>public interface ICustomerRepository {
+    IEnumerable GetCustomers();
+
+    Customer GetCustomerByID(int customerId);
+
+    void InsertCustomer(Customer customer);
+
+    void DeleteCustomer(int customerId);
+
+    void UpdateCustomer(Customer customer);
+
+    void Save();
+}</code></pre>
+
+      <p>
+        Obviously, we have the difference in that our interface uses Tasks (a necessary
+        evil of async code) but we have two other fundamental differences:
+      </p>
+
+      <ol>
+        <li>
+          <p>
+            There is a <code>Save()</code> method! Now, in DDD, this has no business being
+            inside the domain. This is clearly an infrastructure level concern, in that it
+            requires you to save changes to the persistence. However, our domain code
+            should not concern itself with when to save changes to the database.
+          </p>
+        </li>
+        <li>
+          <p>
+            There is an <code>UpdateCustomer(Customer customer)</code> method. This doesn't
+            adhere to our other requirement, that we should model the repository as an
+            in-memory collection. When you make changes to an instance inside a
+            <code>List&lt;T&gt;</code> (for example) you don't have to tell the list they've
+            been updated - as long as T is a reference type the list will just contain
+            references to the entity that you've updated, no need for an explicit
+            notification.
+          </p>
+        </li>
+      </ol>
+
+      <p>
+        So, given that we are no longer able to tell the repository when to update or save
+        changes how do we do this automatically as part of the infrastructure?
+      </p>
+
+      <p>
+        <strong>We need a change tracker!</strong> - a thing that will tell us when changes
+        have been made, and what, so that we can automatically update the persistence layer.
+      </p>
+
+      <p>
+        Many .Net
+        <a href="https://en.wikipedia.org/wiki/Object%E2%80%93relational_mapping">ORM</a>s
+        provide similar functionality. This post is a review of some of the techniques used
+        to implement it.
+      </p>
+
+      <h2>EF Core/NHibernate</h2>
+
+      <p>
+        While EF Core does support multiple change trackers, it advocates the same
+        functionality that NHibernate uses: they copy values during load of the entity, hold
+        references to the entity, and then, when you want to persist all changes, it compares
+        all loaded entities with their intial values to identify the changes before then
+        persisting those changes.
+      </p>
+
+      <p>Looking at a simple example from EF Core:</p>
+
+      <pre><code>using (var context = new BloggingContext())
+{
+    var blog = context.Blogs.First();
+    blog.Url = "http://example.com/blog";
+    context.SaveChanges();
+}</code></pre>
+
+      <p>
+        The key parts of this are that when you call <code>context.Blogs.First()</code> EF
+        executes a (usually) sql query (assuming not already in the session) to get the blog
+        data from database. It then does two things: store the properties in an actual
+        instance of <code>Blog</code>, which it returns from this method invocation, and it
+        stores the properties in a map so that it knows the original values.
+      </p>
+
+      <p>
+        When you change the <code>Url</code> property nothing happens as far as EF is
+        concerned. This is just a standard property setter.
+      </p>
+
+      <p>
+        When you then execute <code>context.SaveChanges()</code> EF looks at all the entities
+        loaded through the context, finds a single Blog entry, does a property by property
+        comparison of it's map and the actual instance and finds a difference in the
+        <code>Url</code> property. It will then execute a update statement against the
+        underlying persistence store to record the change.
+      </p>
+
+      <h2>EF Core Proxies</h2>
+
+      <p>
+        While not the recommended approach any more, EF Core also supports a different change
+        tracking capability out of the box. This implementation uses proxying of the users
+        classes in order to inject property change notifications in to the setters of objects.
+        This has been deprecated due to performance issues (and no doubt the annoying
+        requirement of marking all your properties virtual).
+      </p>
+
+      <h2>Dashing</h2>
+
+      <p>
+        <a href="https://github.com/Polylytics/dashing">Dashing</a> is an ORM mostly written
+        at my company, <a href="https://www.abstractleap.com">Abstract Leap</a>. In order to
+        achieve change tracking in entities we take a drastically different approach. At
+        compile time, just after the assembly is created, we modify the IL code of each
+        domain class so that change tracking simply becomes part of the property setter.
+      </p>
+
+      <p>In practice, you write the following code:</p>
+
+      <pre><code>public class Blog {
+    public int BlogId { get; set; }
+
+    public string Name { get; set; }
+}</code></pre>
+
+      <p>but the build process re-writes this to be (along the lines of):</p>
+
+      <pre><code>public class Blog {
+    public int BlogId { get; set; }
+
+    private string name;
+
+    private string name_OldValue;
+
+    private bool name_IsDirty;
+
+    public string Name {
+        get {
+            return this.name;
+        }
+        set {
+            if (!name_IsDirty &amp;&amp; ((name == null &amp;&amp; value != null) || (name != null &amp;&amp; !name.Equals(value))))
+            {
+                name_OldValue = name;
+                name_IsDirty = true;
+            }
+
+            name = value;
+        }
+    }
+}</code></pre>
+
+      <p>This has several advantages:</p>
+
+      <ol>
+        <li>As a developer, you do not have to mark all your properties as <code>virtual</code>.</li>
+        <li>
+          There is no need to copy all of the original values when loading an entity so we get
+          a performance improvement as well as a memory reduction (over EF).
+        </li>
+        <li>The entity knows itself whether it is dirty or not.</li>
+      </ol>
+
+      <h2>Marten</h2>
+
+      <p>
+        <a href="https://github.com/JasperFx/marten">Marten</a> is a .NET Transactional
+        Document DB and Event Store on PostgreSQL.
+      </p>
+
+      <p>
+        Marten provides a range of options in terms of persisting changes to entities.
+        Essentially, either you have automatic change tracking or you don't. However, having
+        looked at the implementation you may want, at least for now, to stay away from the
+        automatic change tracker. It's a very simple implementation, and probably works very
+        well, but performance may vary.
+      </p>
+
+      <p>
+        Similarly to EF Core, Marten stores the intial values of a entity during load from
+        PostgreSQL. And similarly to EF Core, Marten then compares the initial values against
+        the loaded instances. However, it does this through serialization of the entities in
+        to JSON and then comparison of those JSON strings to check for changes.
+      </p>
+
+      <h2>Round up</h2>
+
+      <p>So, it looks like we have 4 ways of tracking changes to entities:</p>
+
+      <ol>
+        <li>
+          <p>Store the intial state and compare that to instances later.</p>
+          <p>1a. Using a property by property mechanism</p>
+          <p>1b. Using some other mechanism</p>
+        </li>
+        <li>Use runtime proxying to record data changes.</li>
+        <li>Modify compiled IL through some AOP technique to record data changes.</li>
+      </ol>
+
+    </article>
+
+    <footer>
+      <p><small>© <span id="year"></span> Mark Jerzykowski</small></p>
+    </footer>
+
+  </main>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+
+</body>
+</html>

@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Translating Razor — Mark Jerzykowski</title>
+  <meta name="description" content="Using the Razor parser to automatically rewrite hard-coded strings in ASP.Net MVC views into calls to a translation engine.">
+
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.jade.min.css">
+  <style>
+    :root { --pico-font-size: 105%; }
+
+    /* keep long-form text at a comfortable reading measure */
+    main.container { max-width: 48rem; }
+
+    pre { font-size: 0.85em; }
+  </style>
+</head>
+<body>
+
+  <main class="container">
+
+    <nav>
+      <ul>
+        <li><a href="/">Home</a></li>
+        <li><a href="/blog/">Blog</a></li>
+      </ul>
+    </nav>
+
+    <article data-pagefind-body>
+
+      <header>
+        <h1>Translating Razor</h1>
+        <p><small><time datetime="2020-05-26">26 May 2020</time></small></p>
+      </header>
+
+      <h2>Introduction</h2>
+
+      <p>
+        One of our larger projects started off without any internationalisation - it was
+        built for a UK client, and written in English using ASP.Net MVC 5. This application
+        consists of several front end applications, some of them customer facing, others for
+        users of the business only.
+      </p>
+
+      <p>
+        Our first requirement for translation was in 2 of the customer facing applications.
+        We built a small framework to handle the runtime translation and then used sweat, and
+        tears, to replace the hard-coded text inside the views with calls to the translation
+        engine.
+      </p>
+
+      <p>This change turns this code</p>
+
+      <pre><code>&lt;h2&gt;Process @model.VoucherId&lt;/h2&gt;</code></pre>
+
+      <p>in to this code:</p>
+
+      <pre><code>&lt;h2&gt;@T(w =&gt; w.Translation.Vouchers.Process, new { VoucherId = model.VoucherId })&lt;/h2&gt;</code></pre>
+
+      <h2>Round 2</h2>
+
+      <p>
+        Fast forward a year or so and we were in the position of needing to internationalise
+        a large amount of one of the back office applications.
+      </p>
+
+      <p>
+        Previously, we had used human grunt to do the string matching. We needed something
+        quicker this time.
+      </p>
+
+      <p>
+        We decided to write a little tool to automatically re-work the views from being
+        hard-coded to being written as in the example above.
+      </p>
+
+      <p>
+        As we know <a href="https://stackoverflow.com/a/1732454">parsing html is hard</a>, but
+        that's what we need to do to understand whether our strings need translating or not.
+      </p>
+
+      <h2>Parsing Razor</h2>
+
+      <p>
+        Razor, being a templating language, already has a parser! It's in
+        Microsoft.AspNet.Razor and is called
+        <code>System.Web.Razor.Parser.RazorParser</code>. It's one of those bits of code
+        that's public but you're not meant to use it:
+      </p>
+
+      <blockquote>
+        This type/member supports the .NET Framework infrastructure and is not intended to be
+        used directly from your code. Represents a Razor parser.
+      </blockquote>
+
+      <p>
+        So, you can make use of this to parse razor files and get the abstract syntax tree:
+      </p>
+
+      <pre><code>var razorParser = new RazorParser(new CSharpCodeParser(), new HtmlMarkupParser());
+this.results = razorParser.Parse((TextReader)new SeekableTextReader(this.razor));</code></pre>
+
+      <p>
+        From this, we can then look at the tree of nodes, extract out things that look like
+        text strings and replace those pieces of code with the strongly typed method
+        invocations instead. At the same time, we generate the strongly typed helper classes
+        which contain the English fallback.
+      </p>
+
+      <p>
+        There are lots of different places that we can find text strings to translate inside
+        razor page. There are obvious ones like inside a <code>&lt;p&gt;&lt;/p&gt;</code>,
+        slightly less obvious like inside the <code>alt</code> tag of an
+        <code>&lt;img&gt;</code> element and then harder things like arguments to HtmlHelper
+        methods e.g. <code>@Html.ActionLink("Click here")</code>.
+      </p>
+
+      <p>For each one of these we write a class that implements the following class:</p>
+
+      <pre><code>interface IExtractor {
+    Possibly IsMatch(Span span, ISymbol symbol, Context context);
+
+    IEnumerable&lt;(Span, ISymbol, Context)&gt; Match();
+
+    void Reset();
+}</code></pre>
+
+      <p>
+        We recurse down through the tree, checking for matches and once we've got some
+        candidates for a particular section of code we pick the one that's the longest. We do
+        that so that we get a single translation entry for an entire block of text, even it's
+        split up over multiple paragraphs.
+      </p>
+
+      <p>The piece of code walks the parser results is:</p>
+
+      <pre><code>private void WalkBlock(Block block, Context context) {
+    // try to greedily match internationalisation patterns
+    // we care about:
+    //      text content of html elements
+    //      title attribute content
+    //      alt attribute content
+    //      input placeholder
+    //      input[type=submit] value
+    //      @:XYZ
+    //      &lt;text&gt;XYZ&lt;/text&gt;
+    //      @Html.ActionLink("X",...)
+
+    // track:
+    //      are we inside an element definition?            &lt;div .X. &gt;
+    //      are we inside an attribute definition?          &lt;div style="..X.."&gt;
+    //      are we inside an element                        &lt;div ...&gt;X&lt;/div&gt;
+    //
+
+    foreach (var syntaxTreeNode in block.Children) {
+        if (syntaxTreeNode is Span span) {
+            foreach (var spanSymbol in span.Symbols) {
+                context.Update(span, spanSymbol);
+                foreach (var translator in this.extractors) {
+                    var match = translator.IsMatch(span, spanSymbol, context);
+                    if (match == Possibly.Yep) {
+                        this.matches.Add(translator.Match());
+                    }
+
+                    if (match != Possibly.Maybe) {
+                        translator.Reset();
+                    }
+                }
+            }
+        }
+        else {
+            var childBlock = (Block)syntaxTreeNode;
+            this.WalkBlock(childBlock, context);
+        }
+    }
+}</code></pre>
+
+      <p>
+        You'll notice that there's a <code>Context</code> object. This keeps track of the
+        “context” of the parser and provides that to the extractors so that they know what
+        type of piece of code we're in. This is because the parser doesn't provide us with a
+        DOM, like in html, but a much lower level syntax, so we need this extra layer to
+        track that we are, for example, inside an html element attribute.
+      </p>
+
+      <p>
+        Once this piece of code has executed we now have our list of candidate strings, and
+        their locations in the original source code.
+      </p>
+
+      <p>
+        The rest of the code then goes through the matches, selecting the longest ones,
+        finding existing translations where they already exist (for example, a “Save” button)
+        or creating new ones where they don't and then generating the code and inserting into
+        the razor file.
+      </p>
+
+      <p>
+        Finally, with the help of a good diff tool, or in our case the use of a good git gui,
+        you can quickly review the changes, tweak where necessary and then commit to the
+        repository.
+      </p>
+
+    </article>
+
+    <footer>
+      <p><small>© <span id="year"></span> Mark Jerzykowski</small></p>
+    </footer>
+
+  </main>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+
+</body>
+</html>
